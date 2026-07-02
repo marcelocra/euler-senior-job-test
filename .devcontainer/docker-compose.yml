@@ -1,8 +1,6 @@
-name: euler
+name: ${COMPOSE_PROJECT_NAME}
 services:
   dev:
-    user: node # Used by the image we'll be using.
-
     # NOTE: When there's custom Dockerfile, usually it is better to build with
     # `build:` instead of `image:`. The exception is when using Podman instead
     # of Docker. In that case, it is more reliable to build the image manually
@@ -10,17 +8,18 @@ services:
     # build:
     #   context: .
     #   dockerfile: Dockerfile
-    image: localhost/mcra-euler
+    image: localhost/mcra-dev:${COMPOSE_PROJECT_NAME}
+    volumes:
+      - ..:/workspaces/${COMPOSE_PROJECT_NAME}
 
     # Mount a temporary in-memory filesystem (tmpfs) at /tmp inside the container,
     # with permissions set to allow read/write, execution, and typical /tmp security settings.
     # This ensures /tmp is fast, isolated, and gets wiped on container restart.
     tmpfs:
       - /tmp:rw,exec,nosuid,nodev,mode=1777
-
-    volumes:
-      - ..:/workspaces/euler
-    working_dir: /workspaces/euler
+    working_dir: /workspaces/${COMPOSE_PROJECT_NAME}
+    hostname: ${COMPOSE_PROJECT_NAME}
+    user: node # Used by the image we'll be using.
     command: sleep infinity
     networks:
       - dev-network

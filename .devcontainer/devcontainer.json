@@ -1,5 +1,28 @@
 {
+  "name": "euler", // Name that will be shown in the VS Code title bar.
+
   "dockerComposeFile": "docker-compose.yml",
   "service": "dev",
-  "workspaceFolder": "/workspaces/euler"
+
+  "remoteUser": "node",
+  "workspaceFolder": "/workspaces/euler",
+
+  "containerEnv": {
+    // Essential locale and timezone settings. Change but DO NOT REMOVE.
+    // Without these, you WILL get really weird encoding and date/time problems.
+    "TZ": "${localEnv:TZ:America/Sao_Paulo}",
+    "LC_ALL": "${localEnv:LC_ALL:C.UTF-8}",
+    "LANG": "${localEnv:LANG:C.UTF-8}"
+  },
+
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "eamodio.gitlens",
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode",
+        "redhat.vscode-yaml"
+      ]
+    }
+  }
 }
