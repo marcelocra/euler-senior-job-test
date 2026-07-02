@@ -1,0 +1,27 @@
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+indent_size = 2
+indent_style = space
+insert_final_newline = true
+trim_trailing_whitespace = true
+spelling_languages = en-US,en,pt-BR,pt
+max_line_length = 120
+
+# Configuration files and data formats (YAML, JSON, TOML, Lua)
+# These typically benefit from shorter line lengths for readability
+[*.{lua,toml,yaml,yml,json,jsonc,json5}]
+max_line_length = 80
+
+# Scripts and system configuration files
+# These languages commonly use 4-space indentation
+[*.{py,sh,zsh,bash,nu,gitconfig,tmux.conf}]
+indent_size = 4
+max_line_length = 80
+
+[*.{md,markdown,mdx}]
+indent_size = 4
+max_line_length = unset
+trim_trailing_whitespace = false

@@ -1,0 +1,64 @@
+#!/usr/bin/env bash
+# Use this to help develop in this workspace.
+set -euo pipefail
+
+build=false
+up=false
+down=false
+activate_aliases=false
+
+devcontainer_build() {
+    pushd .devcontainer
+    docker build -t localhost/mcra-dev:euler .
+    popd
+}
+
+devcontainer_up() {
+    pushd .devcontainer
+    docker compose up -d
+    popd
+}
+
+devcontainer_down() {
+    pushd .devcontainer
+    docker compose down
+    popd
+}
+
+cli_aliases_activate() {
+    local zshrc="${HOME}/.zshrc"
+    touch "$zshrc"
+
+    # Remove existing block (no-op if markers aren't there)
+    sed -i '/# <<< CUSTOM SETUP/,/# >>> CUSTOM SETUP/d' "$zshrc"
+
+    # Append fresh block
+    cat >> "$zshrc" << 'EOF'
+# <<< CUSTOM SETUP
+
+alias nr='pnpm run'
+alias rrc='source ~/.zshrc'
+alias supa='pnpm exec supabase'
+alias ppath='echo $PATH | tr ":" "\n"'
+alias gcm='git commit -m'
+alias gs='git status'
+
+[[ ! -d ~/bin ]] && mkdir ~/bin
+[[ ! -f ~/bin/op-signer ]] && ln -s /usr/bin/ssh-keygen ~/bin/op-signer
+[[ "$PATH" == *"$HOME/bin"* ]] || export PATH="$PATH:$HOME/bin"
+
+# >>> CUSTOM SETUP
+EOF
+
+    echo "Run '. ~/.zshrc' (try 'rrc') to activate the aliases."
+}
+
+while getopts "buda" opt; do
+    case $opt in
+      b) devcontainer_build; exit 0 ;;
+      u) devcontainer_up; exit 0 ;;
+      d) devcontainer_down; exit 0 ;;
+      a) cli_aliases_activate; exit 0 ;;
+      *) echo "Invalid option: -$OPTARG" >&2; exit 1 ;;
+  esac
+done
