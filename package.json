@@ -1,0 +1,15 @@
+{
+  "name": "nimbus",
+  "private": true,
+  "packageManager": "pnpm@11.9.0",
+  "scripts": {
+    "dev": "pnpm --filter nimbus-web dev",
+    "build": "pnpm --filter nimbus-web build",
+    "preview": "pnpm --filter nimbus-web preview",
+    "test": "pnpm --filter nimbus-web test",
+    "test:watch": "pnpm --filter nimbus-web test:watch"
+  },
+  "devDependencies": {
+    "supabase": "^2.109.0"
+  }
+}

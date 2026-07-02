@@ -14,7 +14,7 @@ README only gets the app running.
 
 ## Prerequisites
 
-- **Node.js 18+** and npm (`node --version`)
+- **Node.js 18+** and **pnpm** (`node --version`, `pnpm --version`)
 - A free **Supabase** account — <https://supabase.com>
 - Git
 
@@ -63,10 +63,11 @@ VITE_SUPABASE_ANON_KEY=your-anon-publishable-key
 ## 4. Install and run
 
 ```bash
-cd web
-npm install
-npm run dev      # http://localhost:5173
+pnpm install
+pnpm dev       # http://localhost:5173
 ```
+
+(You can also run commands from `web/` with `pnpm dev`, etc.)
 
 ## 5. Create your login and link it to a workspace
 
@@ -91,14 +92,14 @@ npm run dev      # http://localhost:5173
 
 ## Commands
 
-All from inside `web/`:
+From the repo root (or inside `web/`):
 
 | Command | What it does |
 |---|---|
-| `npm run dev` | Start the dev server (Vite) |
-| `npm run build` | Type-check (`tsc -b`) and build for production |
-| `npm test` | Run the test suite once (Vitest) |
-| `npm run test:watch` | Run tests in watch mode |
+| `pnpm dev` | Start the dev server (Vite) |
+| `pnpm build` | Type-check (`tsc -b`) and build for production |
+| `pnpm test` | Run the test suite once (Vitest) |
+| `pnpm test:watch` | Run tests in watch mode |
 
 ## Where each task lives
 
