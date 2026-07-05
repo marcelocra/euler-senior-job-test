@@ -1,10 +1,4 @@
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useState,
-  type FormEvent,
-} from 'react'
+import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { supabase } from '../lib/supabase'
 import type { Task, TaskStatus } from '../lib/types'
 import { useWorkspace } from '../context/WorkspaceContext'
@@ -12,7 +6,7 @@ import TaskItem from './TaskItem'
 
 export default function TaskList() {
   const { activeWorkspaceId, activeRole } = useWorkspace()
-  const [allTasks, setAllTasks] = useState<Task[]>([])
+  const [tasks, setTasks] = useState<Task[]>([])
   const [search, setSearch] = useState('')
   const [searchResults, setSearchResults] = useState<Task[] | null>(null)
   const [loading, setLoading] = useState(false)
@@ -20,84 +14,91 @@ export default function TaskList() {
 
   const canWrite = activeRole === 'admin' || activeRole === 'member'
 
-  // --------------------------------------------------------------------------
-  // PERFORMANCE ISSUE (Task 1b):
-  // This pulls EVERY task in the database to the client on each load and the
-  // current workspace's rows are then filtered out in memory below. It grows
-  // linearly with total tasks across all workspaces, not with what's shown.
-  // --------------------------------------------------------------------------
+  // Clear anything from the previous workspace the instant it changes, so
+  // there's no gap where the new workspace's view still shows old data while
+  // the fresh fetch/search below are in flight.
+  useEffect(() => {
+    setTasks([])
+    setSearchResults(null)
+  }, [activeWorkspaceId])
+
+  // Scoped to the active workspace at the query level, so cost tracks what's
+  // shown instead of the total number of tasks across every workspace. No
+  // workspace selected (e.g. between sign-in and workspaces loading) means no
+  // query at all (the list just stays empty).
   const loadTasks = useCallback(async () => {
+    if (!activeWorkspaceId) {
+      setTasks([])
+      setLoading(false)
+      return
+    }
     setLoading(true)
     const { data, error } = await supabase
       .from('tasks')
       .select('*')
+      .eq('workspace_id', activeWorkspaceId)
       .order('created_at', { ascending: false })
     if (error) {
       console.error('Failed to load tasks', error)
     } else if (data) {
-      setAllTasks(data as Task[])
+      setTasks(data as Task[])
     }
     setLoading(false)
-  }, [])
+  }, [activeWorkspaceId])
 
   useEffect(() => {
     void loadTasks()
-  }, [loadTasks, activeWorkspaceId])
+  }, [loadTasks])
 
-  // Client-side filtering — paired with the over-fetch above.
-  const tasks = useMemo(
-    () => allTasks.filter((t) => t.workspace_id === activeWorkspaceId),
-    [allTasks, activeWorkspaceId],
-  )
-
-  // --------------------------------------------------------------------------
-  // BUG (Task 1a): "the app gets sluggish after switching workspaces a few
-  // times." A new auto-refresh interval is started every time the workspace
-  // changes, and nothing ever tears the old one down — they pile up.
-  // --------------------------------------------------------------------------
+  // Auto-refresh so edits made elsewhere in the same workspace show up
+  // without a manual reload. `loadTasks` changes identity on every workspace
+  // switch, so this effect re-runs then too (the returned cleanup clears the
+  // previous interval each time and on unmount, so they never pile up. No
+  // point polling when there's no workspace to poll for.
   useEffect(() => {
-    setInterval(() => {
+    if (!activeWorkspaceId) return
+    const id = setInterval(() => {
       void loadTasks()
     }, 5000)
-    // (no cleanup — the interval is never cleared)
+    return () => clearInterval(id)
   }, [activeWorkspaceId, loadTasks])
 
-  // --------------------------------------------------------------------------
-  // BUG (Task 1a): "the list sometimes shows results from a previous search."
-  // Every keystroke fires a request and applies whatever comes back. A slow
-  // earlier response can land after a newer one and clobber it. There is no
-  // cancellation or last-write-wins guard.
-  // --------------------------------------------------------------------------
+  // Each run gets its own AbortController, and the previous request (if any)
+  // is cancelled whenever the term/workspace changes or the component
+  // unmounts. Checking `aborted` in the callback too means a slow, now-stale
+  // response can never land after (and clobber) a newer one. With no
+  // workspace selected, or an empty term, there's nothing to search for.
+  // TODO(later): Debounce the search.
   useEffect(() => {
     const term = search.trim()
-    if (!term) {
+    if (!term || !activeWorkspaceId) {
       setSearchResults(null)
       return
     }
+    const controller = new AbortController()
     supabase
       .from('tasks')
       .select('*')
       .eq('workspace_id', activeWorkspaceId)
       .ilike('title', `%${term}%`)
       .order('created_at', { ascending: false })
-      .then(({ data }) => {
+      .abortSignal(controller.signal)
+      .then(({ data, error }) => {
+        if (controller.signal.aborted) return
+        if (error) {
+          console.error('Failed to search tasks', error)
+          return
+        }
         setSearchResults((data ?? []) as Task[])
       })
+    return () => controller.abort()
   }, [search, activeWorkspaceId])
 
-  // --------------------------------------------------------------------------
-  // BUG (Task 1a, optional/stale-closure): this title updater is wired up once
-  // and captures the first render's `tasks`, so the count it shows never moves
-  // even as tasks change. (Cleanup is present here — the defect is the empty
-  // dependency array capturing stale state.)
-  // --------------------------------------------------------------------------
+  // Sync the title directly off the count on every change, instead of
+  // polling a value that's already available at render time.
   useEffect(() => {
-    const id = setInterval(() => {
-      document.title = `Nimbus — ${tasks.length} tasks`
-    }, 2000)
-    return () => clearInterval(id)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+    document.title = `Nimbus — ${tasks.length} tasks`
+  }, [tasks.length])
 
   async function createTask(e: FormEvent) {
     e.preventDefault()
@@ -164,7 +165,9 @@ export default function TaskList() {
       </div>
 
       {visible.length === 0 ? (
-        <p className="muted">No tasks{search ? ' match your search' : ' yet'}.</p>
+        <p className="muted">
+          No tasks{search ? ' match your search' : ' yet'}.
+        </p>
       ) : (
         visible.map((task) => (
           <TaskItem
