@@ -95,12 +95,92 @@ All three fixes are in `web/src/components/TaskList.tsx`.
 
 ## 1c — Multi-tenancy & roles
 
-<!--
-- Where isolation and role enforcement live (the RLS policies), and how they
-  hold even if the client is bypassed.
-- Your tenancy-strategy note: shared tables + RLS vs schema-per-tenant vs
-  DB-per-tenant — what you chose and why.
-- How to run your access-control tests.
--->
+**Tenancy strategy.** Shared tables (`workspaces`, `memberships`, `tasks`) with
+a `workspace_id` column, isolated by Postgres/Supabase row-level security
+(RLS), rather than schema-per-tenant or database-per-tenant. For a product at
+this stage, shared tables + RLS keep operations, migrations, and querying
+simple (one schema to evolve, one connection pool, easy cross-workspace admin
+tooling), and they make onboarding a new workspace a single row insert instead
+of provisioning a schema. Schema- or database-per-tenant only earns its
+operational cost when a customer needs hard physical isolation, per-tenant
+schema customization, or a compliance requirement that shared storage can't
+satisfy, none of which applies here.
 
-_Your tenancy strategy, enforcement points, and how to run the tests._
+**Enforcement (`supabase/policies/rls_policies.sql`).** RLS is enabled on all
+three tables; every rule runs server-side and holds even if a client calls the
+API directly with the anon key:
+
+- `tasks` — any workspace member can `select`; `admin`/`member` can
+  `insert`/`update`; only `admin` can `delete`.
+- `memberships` — any workspace member can `select`; only `admin` can
+  `insert`/`update`/`delete`, and only within their own workspace.
+- `workspaces` — any workspace member can `select`; only `admin` can
+  `update`/`delete`, and only their own workspace.
+
+Two `security definer` helper functions, `is_workspace_member(ws)` and
+`has_workspace_role(ws, roles)`, centralize the "is this user a member /
+does this user have this role" checks. They query `memberships` directly
+under elevated privilege, so the policies on `memberships` itself never need
+to reference `memberships` again to evaluate, avoiding the infinite-recursion
+trap of a table's RLS policy depending on a `select` against that same table.
+
+Every `insert`/`update` policy pairs a `using` (or `with check`) clause with
+the _same_ role/membership check applied to `workspace_id`. The `with check`
+half is what stops a member from re-pointing an existing row, or inserting a
+new one, into a workspace they don't belong to (e.g.
+`insert into tasks (workspace_id, ...) values (<other workspace>, ...)`).
+Without it, `using` alone would only guard reads/deletes of existing rows, not
+the workspace_id value being written.
+
+The UI's role-based button gating (hiding admin-only actions from
+members/viewers) is kept as defense-in-depth for a better UX, but it is not a
+security boundary, these RLS policies are the sole source of truth, and the
+tests below prove the rules hold even when the UI is bypassed entirely.
+
+**Tests (`web/src/test/access-control.example.test.ts`).** Integration tests
+against a real (disposable/local) Supabase project, exercising actual Auth +
+RLS rather than mocks. `beforeAll` creates four real users via
+`service.auth.admin.createUser` and seeds `memberships` linking them to two
+workspaces (Acme, Globex) as `admin`, `member`, and `viewer`, then signs each
+in through the anon client so their queries run under RLS as that user.
+Covered cases:
+
+- A Globex viewer cannot read Acme tasks (empty result, no error) but can read
+  their own workspace's tasks.
+- An Acme member cannot insert a task into Globex.
+- An Acme viewer cannot insert, update, or delete tasks (read-only).
+- An Acme member can create and edit tasks but cannot delete one or insert a
+  membership (admin-only actions are denied).
+- An Acme admin can create/update/delete tasks and add memberships within
+  Acme, but cannot create a task or membership in Globex (admin power is
+  scoped to their own workspace, not global).
+
+Run with `pnpm test` (runs alongside the rest of the suite).
+
+**Test environment.** Tests need `SUPABASE_URL` and `SUPABASE_ANON_KEY`
+(anon key, used for the signed-in user clients so queries are actually
+subject to RLS) plus a `SUPABASE_SERVICE_ROLE_KEY`, used only in test
+setup/teardown (`web/.env`, read server-side by the test file) to create/delete
+users and seed memberships. The service-role key bypasses RLS by design and
+must never ship to browser code or be exposed with a `VITE_`-prefixed env var.
+Point this at a disposable/local Supabase project, **NEVER a production**
+project.
+
+**Manual validation.** Before the RLS policies were applied, calling
+`supabase.from('tasks').select().eq('workspace_id', ACME)` from a signed-in
+Globex session returned Acme's tasks (example call below). After enabling RLS
+with the policies
+above, the identical call returns zero rows (no error, just an empty result),
+confirming isolation is enforced by Postgres itself and not just by the app's
+query filters. (Example call below.)
+
+```ts
+useCallback(async () => {
+    const { data, error } = await supabase
+        .from('tasks')
+        .select('*')
+        .eq('workspace_id', '11111111-1111-1111-1111-111111111111')
+    console.log({ data })
+    console.log({ activeWorkspaceId })
+}, [])()
+```
