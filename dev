@@ -2,10 +2,26 @@
 # Use this to help develop in this workspace.
 set -euo pipefail
 
-build=false
-up=false
-down=false
-activate_aliases=false
+usage() {
+    cat << 'EOF'
+Usage: dev <option>
+
+Options:
+    -h  Show this help message
+    -b  Build the devcontainer
+    -u  Up the devcontainer
+    -d  Down the devcontainer
+    -a  Activate the cli aliases
+EOF
+}
+
+# If no options are provided, show the help message.
+if [[ $# -eq 0 ]]; then
+    echo "No options provided. Showing help message."
+    echo
+    usage
+    exit 1
+fi
 
 devcontainer_build() {
     pushd .devcontainer
@@ -36,12 +52,15 @@ cli_aliases_activate() {
     cat >> "$zshrc" << 'EOF'
 # <<< CUSTOM SETUP
 
-alias nr='pnpm run'
+alias r='pnpm run'
 alias rrc='source ~/.zshrc'
+alias dev='./dev'
 alias supa='pnpm exec supabase'
 alias ppath='echo $PATH | tr ":" "\n"'
 alias gcm='git commit -m'
 alias gs='git status'
+alias gps='git push'
+alias gpl='git pull'
 
 [[ ! -d ~/bin ]] && mkdir ~/bin
 [[ ! -f ~/bin/op-signer ]] && ln -s /usr/bin/ssh-keygen ~/bin/op-signer
@@ -49,12 +68,12 @@ alias gs='git status'
 
 # >>> CUSTOM SETUP
 EOF
-
     echo "Run '. ~/.zshrc' (try 'rrc') to activate the aliases."
 }
 
-while getopts "buda" opt; do
+while getopts ":hbuda" opt; do
     case $opt in
+      h) usage; exit 0 ;;
       b) devcontainer_build; exit 0 ;;
       u) devcontainer_up; exit 0 ;;
       d) devcontainer_down; exit 0 ;;

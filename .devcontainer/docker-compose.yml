@@ -11,6 +11,7 @@ services:
     image: localhost/mcra-dev:${COMPOSE_PROJECT_NAME}
     volumes:
       - ..:/workspaces/${COMPOSE_PROJECT_NAME}
+      - ${HOME}/.config/dotfiles:/home/node/.config/dotfiles
 
     # Mount a temporary in-memory filesystem (tmpfs) at /tmp inside the container,
     # with permissions set to allow read/write, execution, and typical /tmp security settings.
