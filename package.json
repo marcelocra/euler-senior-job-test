@@ -10,6 +10,7 @@
     "test:watch": "pnpm --filter nimbus-web test:watch"
   },
   "devDependencies": {
+    "@types/node": "^26.1.0",
     "supabase": "^2.109.0"
   }
 }
