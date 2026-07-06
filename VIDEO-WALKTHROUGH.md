@@ -2,22 +2,26 @@
 
 **Video link:** _paste your Loom (or similar) URL here_
 
-## Project
+## What I show in the video
 
-Hermes Airlock is a personal AI-agent stack I built to run a 24/7 assistant through Telegram, with useful web capabilities but constrained security boundaries.
+A short walkthrough of **Hermes Airlock**, a personal AI-agent stack I built to run a 24/7 assistant through Telegram.
 
-The goal was not to give the agent every possible tool. The goal was to decide which capabilities were safe enough to run continuously, and to add stronger boundaries before enabling riskier ones.
+The goal was to keep the agent useful, but not give it unrestricted internet access or code execution before I was comfortable with the security boundaries.
 
-I plan to open-source the stack once I finish validating it, remove/templating any sensitive configuration, and make the setup reproducible for other people.
+## Demo first
+
+Show the agent working through Telegram, with a simple prompt.
+
+Switch to the architecture files and walk through the important parts.
 
 ## Architecture
 
 ```mermaid
 flowchart LR
-  U[Me / Telegram] --> H[Hermes Agent]
+  U[Telegram / me] --> H[Hermes Agent]
 
   H --> S[SearXNG<br/>internal search]
-  H --> B[Browser / Reader path]
+  H --> B[Browser / reader path]
 
   B --> P[Caddy egress proxy<br/>deny by default]
   P --> A[Allowlisted hosts<br/>OpenAI, Telegram, r.jina.ai]
@@ -27,63 +31,83 @@ flowchart LR
   S --> I[Internet<br/>separate egress]
 ```
 
-## Walkthrough Outline
+## Talking points
 
 ### 1. Context
 
-- I wanted a personal AI assistant that could run continuously and interact with me through Telegram.
-- It needed memory, web search, page reading, and eventually more advanced tools.
-- The hard part was not just making the agent work. The hard part was deciding what it should not be allowed to do yet.
+I wanted a personal AI assistant that I could keep running through Telegram.
 
-### 2. Architecture
+The challenge was not only making it work. The harder question was: what should this agent _not_ be allowed to do yet?
 
-- Hermes is the main agent.
-- Telegram is the main user interface.
-- SearXNG runs as an internal search service.
-- Page reading currently goes through a constrained reader path.
-- Browser traffic is routed through a Caddy egress proxy.
-- The proxy is deny-by-default: the agent can only reach hosts I explicitly allow.
-- Docker networks separate the agent, search, and external egress paths.
+### 2. Initial decision
 
-### 3. Hard Technical Decision
+I considered more policy-grade options like NemoClaw / NemoHermes / OpenShell.
 
-- I considered more policy-grade options like NemoClaw / NemoHermes / OpenShell.
-- The tradeoff was that I wanted to keep ChatGPT/Codex OAuth compatibility and avoid introducing a heavier platform before I had validated the workflow.
-- I chose Hermes for the first version, but wrapped it in an "airlock": restricted egress, allowlisted destinations, no terminal/code execution yet, and a tiered roadmap for enabling capabilities safely.
-- This was a deliberate product/engineering tradeoff: ship a useful version now, but keep risky capabilities behind explicit boundaries.
+The problem was that I already had ChatGPT/Codex OAuth available and wanted to use that value. NemoHermes did not fit that OAuth requirement well for my first version.
 
-### 4. Security
+So I chose Hermes for the first implementation, but wrapped it in an "airlock": restricted networking, allowlisted egress, no terminal/code execution yet, and a tiered plan for enabling more capabilities later.
 
-- I treated web content as untrusted input.
-- Prompt-level defenses help, but they are not enough by themselves.
-- The important boundary is network-level: the agent does not have unrestricted internet access.
-- The stack uses:
-    - deny-by-default egress through Caddy;
-    - allowlisted external hosts;
-    - separate Docker networks;
-    - no published ports for internal services;
-    - Telegram allowed users;
-    - manual approvals for sensitive actions;
-    - terminal/code execution disabled for now.
-- The security model is defense-in-depth, not "one perfect prompt".
+### 3. Docker architecture
 
-### 5. Performance and Scalability
+Relevant part from `docker-compose.yaml`:
 
-- At this stage, scalability mostly means operational reliability, not serving many users.
-- Search is separated into SearXNG instead of being embedded inside the agent.
-- STT uses a local cached model so repeated restarts do not redownload it.
-- The architecture is tiered: I can add stronger components later, such as a local reader adapter or sandboxed code execution, without redesigning everything.
+```yaml
+# Topology (Tier 2 — egress allowlist + external reader):
+#   hermes        → hermes-llm only (no direct internet)
+#   egress-proxy  → hermes-llm + hermes-external; allowlist: LLM/Telegram/r.jina.ai
+#   searxng       → hermes-llm + hermes-external; web_search (open egress, no proxy)
+#   fastcrw       → commented out; not running by default (future reader adapter)
+```
 
-### 6. What I Would Do Differently
+What I explain:
 
-- I would build the reader adapter earlier so page extraction does not depend on an external reader service.
-- I would add stronger post-deploy validation and alerts around blocked egress attempts.
-- I would evaluate sandboxed code execution earlier, but still keep it disabled by default until the boundary is clear.
-- I would make the eventual open-source version reproducible from the beginning: clean templates, generated secrets, and a safer first-run checklist.
+- Hermes is on an internal Docker network.
+- Browser traffic goes through the egress proxy.
+- SearXNG is separate and handles search.
+- `fastcrw` is parked for now; I did not enable every capability at once.
 
-### 7. Future Direction
+### 4. Egress allowlist
 
-- Finish validating the current Tier 2 setup.
-- Replace the external reader path with a local reader adapter.
-- Evaluate a policy-grade execution layer for code/terminal work.
-- Open-source the stack once secrets, config, and deployment docs are cleaned up.
+Relevant part from `egress.Caddyfile`:
+
+```caddy
+forward_proxy {
+  ports 443
+
+  acl {
+    allow *.openai.com
+    allow *.chatgpt.com
+    allow api.telegram.org
+    allow r.jina.ai
+
+    deny all
+  }
+}
+```
+
+What I explain:
+
+- The agent does not have open internet access.
+- Only explicit hosts are allowed.
+- Blocked attempts show up in proxy logs.
+- This is stronger than relying only on prompt instructions.
+
+### 5. Security tradeoff
+
+Prompt injection is not solved by one prompt or one delimiter.
+
+The stack uses defense in depth:
+
+- web content is treated as untrusted;
+- browser egress is deny-by-default;
+- internal services are separated by Docker networks;
+- terminal/code execution is disabled for now;
+- sensitive actions require clearer boundaries before being enabled.
+
+### 6. What I would do differently
+
+The one thing I would do differently is test the NemoHermes / policy-grade route earlier.
+
+Even if I still chose Hermes for the first version because of ChatGPT/Codex OAuth, I would compare the tradeoffs sooner, especially for future code execution and multi-agent orchestration.
+
+I also plan to open-source this once I finish validating the setup and clean up any sensitive configuration.
