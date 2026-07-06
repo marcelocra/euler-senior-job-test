@@ -1,12 +1,14 @@
 # Project Walkthrough — Hermes Airlock
 
-**Video link:** _paste your Loom (or similar) URL here_
+**Video link:** https://www.loom.com/share/b06909bb62344118b77ba96a02b64ab2
 
 ## What I show in the video
 
 A short walkthrough of **Hermes Airlock**, a personal AI-agent stack I built to run a 24/7 assistant through Telegram, without giving it unrestricted internet access or code execution before I was comfortable with the security boundaries.
 
 ## Demo first
+
+https://github.com/user-attachments/assets/40eed98c-5f30-4754-a6cf-158d392157f8
 
 Show the agent working through Telegram, with a simple prompt.
 
