@@ -3,7 +3,7 @@
 ## Executive summary
 
 - Keep React + Vite + TypeScript for the app in this first migration phase.
-- Use hosted Supabase (Postgres, Auth, RLS, Edge Functions) rather than standing up new infra.
+- Use hosted Supabase (Postgres, Auth, RLS, Edge Functions) rather than standing up new infra; deploy the frontend separately on Cloudflare Pages.
 - Keep privileged, server-side logic in Edge Functions, never in browser code.
 - Migrate `tasks` as the concrete slice, via a staging table and idempotent `legacy_id` upserts.
 - Protect against data loss with backups, dry runs, validation, a feature flag/cutover switch, and a rollback path.
@@ -18,6 +18,7 @@ There's no universally "best" stack. The right choice depends on what the team a
 - **Keep React + Vite + TypeScript.** It's what the team chose for this exercise, so likely what they already know, and it's a working app today. Staying here minimizes migration scope: no new framework, no new build system, no new deployment target to learn or operate.
 - **Keep Supabase, hosted.** It's managed Postgres plus Auth/RLS/Storage/Edge Functions, so there's no infra to stand up and we keep the RLS-based multi-tenancy already built. Just as importantly, the data underneath is standard Postgres, not a proprietary format. Unlike the no-code platform we're leaving, there's a real exit path later (self-host the same OSS stack, or move to another managed Postgres provider) if cost, compliance, or scale ever demand it.
 - **Use Supabase Edge Functions for privileged, server-side logic.** Nimbus will need privileged operations soon (anything touching a service-role key, future webhooks/billing) that must never run in the browser. Edge Functions already exist in this repo (`supabase/functions/`) and give us that server-side boundary today, without introducing a second runtime, a new server framework, or a new deployment path (e.g. Vercel/AWS) on top of what's already deployed. **Principle going forward:** privileged operations (secrets, cross-tenant admin actions, anything security-sensitive) live server-side in Edge Functions, never in the browser client.
+- **Deploy the frontend as a static build on Cloudflare Pages**, connected to the repo for CI-driven deploys on push. Supabase's "open-source Firebase alternative" positioning covers backend services (Postgres, Auth, Storage, Edge Functions), not static hosting. That's a separate piece, and Cloudflare Pages (or Vercel/Netlify, functionally similar here) fills that gap with zero extra infra to manage.
 - **Next.js as a later option, not now.** If the product grows into needing more integrated server-side rendering, file-based routing, a broader API surface, or generally a fuller full-stack app shell than Edge Functions comfortably provide, Next.js (or a similar framework) is a reasonable next step. That's a bigger migration (new framework, new build/deploy pipeline) best justified by concrete needs rather than taken upfront.
 
 Alternatives (a separate custom backend from day one, different BaaS, different frameworks) seem to have less fit right now.
