@@ -31,25 +31,19 @@ flowchart LR
   S --> I[Internet<br/>separate egress]
 ```
 
-## Talking points
+## The challenge: making it safe
 
-### 1. Context
+I wanted a personal AI assistant that I could keep running through Telegram, with memory, search, and page reading.
 
-I wanted a personal AI assistant that I could keep running through Telegram.
+The challenge was not making it work, but do it in a way that is safe.
 
-The challenge was not only making it work. The harder question was: what should this agent _not_ be allowed to do yet?
+There's a ready-made solution by NVIDIA, NemoClaw, with support for Hermes Agent, but it doesn't support ChatGPT/Codex OAuth natively.
 
-### 2. Initial decision
+That was a requirement for me, so I decided to build my own solution.
 
-I considered more policy-grade options like NemoClaw / NemoHermes / OpenShell.
+## Docker architecture
 
-The problem was that I already had ChatGPT/Codex OAuth available and wanted to use that value. NemoHermes did not fit that OAuth requirement well for my first version.
-
-So I chose Hermes for the first implementation, but wrapped it in an "airlock": restricted networking, allowlisted egress, no terminal/code execution yet, and a tiered plan for enabling more capabilities later.
-
-### 3. Docker architecture
-
-Relevant part from `docker-compose.yaml`:
+A relevant part from `docker-compose.yaml`:
 
 ```yaml
 # Topology (Tier 2 — egress allowlist + external reader):
@@ -59,14 +53,12 @@ Relevant part from `docker-compose.yaml`:
 #   fastcrw       → commented out; not running by default (future reader adapter)
 ```
 
-What I explain:
-
-- Hermes is on an internal Docker network.
-- Browser traffic goes through the egress proxy.
+- Hermes is on an internal Docker network only.
+- Browser and page-reading traffic goes through the egress proxy.
 - SearXNG is separate and handles search.
-- `fastcrw` is parked for now; I did not enable every capability at once.
+- Capability is separated by network, not just by prompts.
 
-### 4. Egress allowlist
+## Egress allowlist
 
 Relevant part from `egress.Caddyfile`:
 
@@ -85,29 +77,19 @@ forward_proxy {
 }
 ```
 
-What I explain:
-
 - The agent does not have open internet access.
-- Only explicit hosts are allowed.
-- Blocked attempts show up in proxy logs.
-- This is stronger than relying only on prompt instructions.
+- Only explicit hosts are allowed; everything else is denied.
+- Blocked attempts show up in the proxy logs — a simple audit trail.
 
-### 5. Security tradeoff
+## Security tradeoff
 
-Prompt injection is not solved by one prompt or one delimiter.
+My approach is defense in depth, not one silver bullet:
 
-The stack uses defense in depth:
-
-- web content is treated as untrusted;
-- browser egress is deny-by-default;
+- web content is treated as untrusted data by the model;
+- browser egress is deny-by-default at the network layer;
 - internal services are separated by Docker networks;
-- terminal/code execution is disabled for now;
-- sensitive actions require clearer boundaries before being enabled.
+- terminal/code execution stays disabled for now — it would make the agent more capable, but changes the risk profile completely. I'd rather ship a constrained, useful assistant now and add a real sandbox later.
 
-### 6. What I would do differently
+## What I would do differently
 
-The one thing I would do differently is test the NemoHermes / policy-grade route earlier.
-
-Even if I still chose Hermes for the first version because of ChatGPT/Codex OAuth, I would compare the tradeoffs sooner, especially for future code execution and multi-agent orchestration.
-
-I also plan to open-source this once I finish validating the setup and clean up any sensitive configuration.
+I would try NemoHermes first, using API keys.
