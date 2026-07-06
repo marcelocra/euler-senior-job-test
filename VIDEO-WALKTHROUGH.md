@@ -4,9 +4,7 @@
 
 ## What I show in the video
 
-A short walkthrough of **Hermes Airlock**, a personal AI-agent stack I built to run a 24/7 assistant through Telegram.
-
-The goal was to keep the agent useful, but not give it unrestricted internet access or code execution before I was comfortable with the security boundaries.
+A short walkthrough of **Hermes Airlock**, a personal AI-agent stack I built to run a 24/7 assistant through Telegram, without giving it unrestricted internet access or code execution before I was comfortable with the security boundaries.
 
 ## Demo first
 
@@ -31,15 +29,13 @@ flowchart LR
   S --> I[Internet<br/>separate egress]
 ```
 
-## The challenge: making it safe
+## The hard decision
 
-I wanted a personal AI assistant that I could keep running through Telegram, with memory, search, and page reading.
+I wanted a personal AI assistant I could keep running through Telegram, with memory, search, and page reading. The challenge wasn't making it work, it was doing it in a way that's safe.
 
-The challenge was not making it work, but do it in a way that is safe.
+NVIDIA has a ready-made option here: NemoClaw, which has a Hermes-compatible variant, NemoHermes. But NemoHermes doesn't support ChatGPT/Codex OAuth natively, and OAuth (a fixed subscription cost) was a hard requirement for me over pay-per-token API keys, which have unbounded cost as usage grows.
 
-There's a ready-made solution by NVIDIA, NemoClaw, with support for Hermes Agent, but it doesn't support ChatGPT/Codex OAuth natively.
-
-That was a requirement for me, so I decided to build my own solution.
+So I built my own airlock around plain Hermes instead: restricted networking, allowlisted egress, no terminal/code execution yet.
 
 ## Docker architecture
 
@@ -79,17 +75,19 @@ forward_proxy {
 
 - The agent does not have open internet access.
 - Only explicit hosts are allowed; everything else is denied.
-- Blocked attempts show up in the proxy logs — a simple audit trail.
+- Blocked attempts show up in the proxy logs, a simple audit trail.
 
-## Security tradeoff
+## Security, performance, and scalability
 
-My approach is defense in depth, not one silver bullet:
+Security is defense in depth, not one silver bullet:
 
 - web content is treated as untrusted data by the model;
 - browser egress is deny-by-default at the network layer;
 - internal services are separated by Docker networks;
-- terminal/code execution stays disabled for now — it would make the agent more capable, but changes the risk profile completely. I'd rather ship a constrained, useful assistant now and add a real sandbox later.
+- terminal/code execution stays disabled for now, it would make the agent more capable, but changes the risk profile completely. I'd rather ship a constrained, useful assistant now and add a real sandbox later.
+
+This isn't a high-traffic system, so the main concern was reliability over raw throughput: SearXNG runs separate from the agent so search load never blocks it, and the local speech-to-text model is cached on disk so restarts don't re-download it.
 
 ## What I would do differently
 
-I would try NemoHermes first, using API keys.
+I'd test the NemoHermes / policy-grade route earlier, even just with API keys, cheaper models, and strict daily usage caps, to validate the tradeoffs before committing to a fixed-subscription setup. I'd also build my own page-reading service sooner instead of depending on a third-party reader.
