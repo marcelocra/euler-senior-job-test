@@ -1,5 +1,14 @@
 # Migration Plan
 
+## Executive summary
+
+- Keep React + Vite + TypeScript for the app in this first migration phase.
+- Use hosted Supabase (Postgres, Auth, RLS, Edge Functions) rather than standing up new infra.
+- Keep privileged, server-side logic in Edge Functions, never in browser code.
+- Migrate `tasks` as the concrete slice, via a staging table and idempotent `legacy_id` upserts.
+- Protect against data loss with backups, dry runs, validation, a feature flag/cutover switch, and a rollback path.
+- Treat users/auth as a separate, harder slice, out of scope here.
+
 ## 1. Target stack
 
 **Recommendation for the first migration phase: keep React + Vite + TypeScript for the app, hosted Supabase (Postgres, Auth, RLS, Storage, Edge Functions), and push privileged operations into Supabase Edge Functions.**
@@ -28,7 +37,7 @@ Chosen as the specific slice because it's representative of the migration work g
 This slice depends on `legacy_id -> id` mapping tables for workspaces and users, used to resolve `workspace_id`/`assignee_id` on each task. This is a real dependency, not a hand-wave:
 
 - **If workspaces/users are already migrated** with mapping tables in place, this slice can proceed directly.
-- **If they are not migrated yet**, do a minimal mapping/import pass first: extract workspaces and users from the no-code platform, load them into `public.workspaces`/`public.users` (or equivalent) with their own `legacy_id` columns, and build the `legacy_id -> id` mapping tables from that import. This doesn't need to be the full users/auth migration (see note below on why auth is out of scope here) — just enough identity and workspace records for tasks to reference. Tasks migration should not start until these mappings exist and have been spot-checked.
+- **If they are not migrated yet**, do a minimal mapping/import pass first: extract workspaces and users from the no-code platform, create the corresponding `public.workspaces` rows, provision each user as a Supabase Auth user (`auth.users`, e.g. via an invite flow) and link them to their workspace(s) via `memberships`, and build `legacy_id -> id` mapping tables (a dedicated migration-mapping table, since `auth.users` and `memberships` don't carry a `legacy_id` column themselves) from that import. This doesn't need to be the full users/auth migration (see note below on why auth is out of scope here) — just enough identity and workspace records for tasks to reference. Tasks migration should not start until these mappings exist and have been spot-checked.
 
 ### Steps
 

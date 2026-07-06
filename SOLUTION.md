@@ -196,8 +196,7 @@ project.
 
 **Manual validation.** Before the RLS policies were applied, calling
 `supabase.from('tasks').select().eq('workspace_id', ACME)` from a signed-in
-Globex session returned Acme's tasks (example call below). After enabling RLS
-with the policies
+Globex session returned Acme's tasks. After enabling RLS with the policies
 above, the identical call returns zero rows (no error, just an empty result),
 confirming isolation is enforced by Postgres itself and not just by the app's
 query filters. (Example call below.)
