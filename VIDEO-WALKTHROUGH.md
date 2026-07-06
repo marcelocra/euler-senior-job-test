@@ -78,6 +78,7 @@ forward_proxy {
 - The agent does not have open internet access.
 - Only explicit hosts are allowed; everything else is denied.
 - Blocked attempts show up in the proxy logs, a simple audit trail.
+- This audit trail is what let me debug why audio transcription wasn't working, now audio is transcribed locally, with no external calls.
 
 ## Security, performance, and scalability
 
