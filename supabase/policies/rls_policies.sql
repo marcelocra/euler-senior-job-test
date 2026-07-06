@@ -1,24 +1,23 @@
 -- ===========================================================================
--- Task 1c — Workspace isolation & roles (YOUR WORK GOES HERE)
+-- Task 1c — Workspace isolation & roles
 -- ===========================================================================
--- This file is a STUB. The starter ships with RLS disabled (see
--- migrations/0001_init.sql) so any signed-in user can touch any workspace's
--- data. Your job: enforce, at the database level,
+-- The starter ships with RLS disabled (see migrations/0001_init.sql) so any
+-- signed-in user can touch any workspace's data. These policies enforce, at
+-- the database level,
 --
 --   1. Isolation — a user only ever sees/affects workspaces they belong to.
 --   2. Roles — admin (manage members + all data), member (create/edit),
 --      viewer (read-only).
 --
--- Enforce these in RLS policies (server-side). The UI already gates buttons by
--- role as defense-in-depth, but UI gating alone is NOT acceptable — the rules
--- must hold even if someone calls the API directly with the anon key.
+-- Enforced in RLS policies (server-side). The UI also gates buttons by role
+-- as defense-in-depth, but UI gating alone is not a security boundary — the
+-- rules below hold even if someone calls the API directly with the anon key.
 --
--- The skeleton below is one reasonable shape. You do not have to follow it;
--- adapt as you see fit, and justify your tenancy strategy in your write-up.
--- Add automated tests proving the rules (see
--- web/src/test/access-control.example.test.ts).
+-- See SOLUTION.md (Task 1c) for the tenancy strategy and rationale, and
+-- web/src/test/access-control.example.test.ts for the automated tests
+-- proving these rules.
 --
--- Apply this file in the Supabase SQL editor once you've filled it in.
+-- Apply this file in the Supabase SQL editor.
 -- ---------------------------------------------------------------------------
 
 create or replace function public.is_workspace_member(ws uuid)

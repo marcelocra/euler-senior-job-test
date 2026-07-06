@@ -15,11 +15,11 @@ All three fixes are in `web/src/components/TaskList.tsx`.
   every `search`/`activeWorkspaceId` change (and on unmount), and the
   `.then()` callback also bails out if `controller.signal.aborted`. Only the
   latest request can ever set `searchResults`.
-- _Validated:_ `pnpm build` and `pnpm test` pass; traced the effect's
-  abort/cleanup ordering by hand for out-of-order responses. To confirm live:
-  throttle the network, type a term, then change it before the response
-  returns. Network tab should show the first request `(canceled)`, and the
-  list should only ever match the last term typed.
+- _Validated:_ `pnpm build`/`pnpm test` pass; traced the effect's
+  abort/cleanup ordering by hand for out-of-order responses.
+  _To confirm live:_ throttle the network, type a term, then change it before
+  the response returns. Expect: the first request shows `(canceled)` in the
+  Network tab, and the list only ever matches the last term typed.
 
 **2. Sluggish after switching workspaces.**
 
@@ -46,11 +46,24 @@ All three fixes are in `web/src/components/TaskList.tsx`.
   one. Also guarded `loadTasks` and the search effect to skip the Supabase
   call entirely (and keep the list empty) when `activeWorkspaceId` is `null`,
   and skip starting the polling interval in that case too.
-- _Validated:_ `pnpm build` and `pnpm test` pass. To confirm live: switch
-  workspaces 5+ times and watch the Network tab. Requests should stay at one
-  per 5s (for the _current_ workspace), not grow with the number of switches.
-  Also watch the task list while switching, it should go empty for a moment
-  rather than showing the old workspace's tasks/search matches.
+- _Refinement, stale `loadTasks` responses:_ that clearing effect only closes
+  the visible window; it doesn't stop a slow, older `loadTasks()` call from
+  resolving _after_ a newer one (or after a workspace switch) and calling
+  `setTasks(data)` with stale, wrong-workspace data. Unlike search, `loadTasks`
+  is invoked from several places (initial load, the polling interval, every
+  mutation) rather than one effect with a single cleanup, so there's no single
+  place to `.abort()` the previous call. Instead, added a monotonically
+  increasing request id in a ref: each call stamps its own id, and a response
+  only touches state if its id still matches the latest one, so a late,
+  outdated response is dropped instead of clobbering newer data.
+- _Validated:_ `pnpm build`/`pnpm test` pass.
+  _To confirm live:_
+    - Switch workspaces 5+ times, watch the Network tab: requests stay at one
+      per 5s (for the _current_ workspace), not growing with switch count.
+      List should also go empty for a moment on switch, not show the old
+      workspace's data.
+    - Throttle the network, switch workspace A → B before A's load resolves.
+      Expect: B's task list is never overwritten by A's (late) response.
 
 **3. Stale closure in the title updater.**
 
@@ -61,16 +74,17 @@ All three fixes are in `web/src/components/TaskList.tsx`.
 - _Fix:_ dropped the interval and set `document.title` directly in a
   `useEffect` keyed on `tasks.length`. No need to poll a value that's already
   available at render time.
-- _Validated:_ `pnpm build` and `pnpm test` pass. To confirm live: add or
-  delete a task and see the title update immediately.
+- _Validated:_ `pnpm build`/`pnpm test` pass.
+  _To confirm live:_ add or delete a task and see the title update
+  immediately.
 
 ## 1b — Performance
 
 - _Issue:_ `loadTasks` fetched the entire `tasks` table (`select('*')`, no
   `workspace_id` filter) and filtered down to the active workspace client-side
-  in a `useMemo`. Cost scaled with tasks across _all_ workspaces, not what's
-  shown, and shipped every other workspace's task data to the browser on
-  every load and every 5s poll.
+  in a `useMemo`. Network/database/client work scaled with tasks across _all_
+  workspaces, not what's shown, and shipped every other workspace's task data
+  to the browser on every load and every 5s poll.
 - _How I spotted it:_ flagged directly in a code comment above `loadTasks`,
   and confirmed by reading the query, with no `.eq('workspace_id', …)` before the
   client-side filter.
@@ -87,11 +101,12 @@ All three fixes are in `web/src/components/TaskList.tsx`.
   current or near-term scale, and it adds real complexity for a problem that
   doesn't exist yet.
 - _Before/after:_ with only two seeded workspaces this isn't a visible
-  latency win yet, the real improvement is architectural (request cost now
-  scales with the active workspace's tasks, not the whole table, including other
-  workspaces' tasks). To measure: seed one workspace with a few thousand tasks,
-  then compare the `tasks` request's size/time in the Network tab while viewing
-  a different, small workspace, before vs. after this change.
+  latency win yet, the real improvement is architectural (the network/database
+  work per request now scales with the active workspace's tasks, not the whole
+  table, including other workspaces' tasks).
+  _To measure:_ seed one workspace with a few thousand tasks, then compare the
+  `tasks` request's size/time in the Network tab while viewing a different,
+  small workspace, before vs. after this change.
 
 ## 1c — Multi-tenancy & roles
 

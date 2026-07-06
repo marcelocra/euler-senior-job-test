@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import { supabase } from '../lib/supabase'
 import type { Task, TaskStatus } from '../lib/types'
 import { useWorkspace } from '../context/WorkspaceContext'
@@ -26,18 +26,32 @@ export default function TaskList() {
   // shown instead of the total number of tasks across every workspace. No
   // workspace selected (e.g. between sign-in and workspaces loading) means no
   // query at all (the list just stays empty).
+  //
+  // Guarded by `loadRequestIdRef` against the same stale-response race as the
+  // search effect: `loadTasks` gets called from multiple places (the initial
+  // effect, the polling interval, and every mutation) rather than a single
+  // effect with a cleanup, so there's no one place to run `.abort()` on the
+  // previous request. A monotonically increasing request id serves the same
+  // purpose: each call stamps its own id, and only the response matching the
+  // current id (i.e. the most recently started call) is allowed to touch
+  // state, so a slow response from before a workspace switch (or before a
+  // newer call) can never land after and clobber a newer one.
+  const loadRequestIdRef = useRef(0)
   const loadTasks = useCallback(async () => {
     if (!activeWorkspaceId) {
+      loadRequestIdRef.current += 1
       setTasks([])
       setLoading(false)
       return
     }
+    const requestId = ++loadRequestIdRef.current
     setLoading(true)
     const { data, error } = await supabase
       .from('tasks')
       .select('*')
       .eq('workspace_id', activeWorkspaceId)
       .order('created_at', { ascending: false })
+    if (loadRequestIdRef.current !== requestId) return
     if (error) {
       console.error('Failed to load tasks', error)
     } else if (data) {
