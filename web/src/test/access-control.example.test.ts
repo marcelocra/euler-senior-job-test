@@ -1,20 +1,17 @@
 /**
- * TEMPLATE for Task 1c — DELETE the `.skip` and implement these once your RLS
- * policies exist.
+ * Task 1c — workspace isolation & roles access-control tests.
  *
  * These are *integration* tests: they exercise real Supabase Auth + RLS, not
  * mocks, because the whole point of Task 1c is that the rules hold at the
  * database level even when the client is bypassed.
  *
- * Suggested setup:
- *   - Create a couple of test users (e.g. via supabase.auth.admin in a setup
- *     script using the service-role key — server-side / in test config only,
- *     NEVER in app code).
- *   - Sign each user in with the anon client (createClient(url, ANON_KEY)) so
- *     queries run as that user under RLS.
- *   - Point tests at a disposable/local Supabase project, not production.
- *
- * The cases below describe WHAT to prove. Fill in the bodies.
+ * Setup:
+ *   - `beforeAll` creates real test users via `service.auth.admin.createUser`
+ *     using the service-role key, server-side / in test config only, NEVER
+ *     in app code, and seeds `memberships` linking them to two workspaces.
+ *   - Each user is then signed in with the anon client (createClient(url,
+ *     ANON_KEY)) so their queries run under RLS as that user.
+ *   - Point this at a disposable/local Supabase project, **NEVER** production.
  */
 
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
@@ -25,14 +22,21 @@ import fs from 'node:fs'
 const ACME = '11111111-1111-1111-1111-111111111111'
 const GLOBEX = '22222222-2222-2222-2222-222222222222'
 
-const supabaseUrl = process.env.SUPABASE_URL ?? import.meta.env.VITE_SUPABASE_URL
-const anonKey = process.env.SUPABASE_ANON_KEY ?? import.meta.env.VITE_SUPABASE_ANON_KEY
+const supabaseUrl =
+  process.env.SUPABASE_URL ?? import.meta.env.VITE_SUPABASE_URL
+const anonKey =
+  process.env.SUPABASE_ANON_KEY ?? import.meta.env.VITE_SUPABASE_ANON_KEY
 
 // Avoid exposing the service role key to the client with VITE_ prefix. Use this
 // simple file read instead of a library (like dotenv) for now.
-const envFile = fs.readFileSync(path.join(import.meta.dirname, '../../.env'), 'utf8')
+const envFile = fs.readFileSync(
+  path.join(import.meta.dirname, '../../.env'),
+  'utf8',
+)
 const serviceRoleKeyMatch = envFile.match(/^SUPABASE_SERVICE_ROLE_KEY=(.+)$/m)
-const serviceRoleKey = serviceRoleKeyMatch ? serviceRoleKeyMatch[1].trim() : undefined
+const serviceRoleKey = serviceRoleKeyMatch
+  ? serviceRoleKeyMatch[1].trim()
+  : undefined
 
 const runId = `rls-${Date.now()}`
 const password = 'TestPassword123!'
@@ -306,7 +310,11 @@ describe('workspace isolation & roles (RLS)', () => {
     expect(updated.error).toBeNull()
     expect(updated.data).toHaveLength(1)
 
-    const deleted = await adminAcme.from('tasks').delete().eq('id', created.data!.id).select('id')
+    const deleted = await adminAcme
+      .from('tasks')
+      .delete()
+      .eq('id', created.data!.id)
+      .select('id')
 
     expect(deleted.error).toBeNull()
     expect(deleted.data).toHaveLength(1)

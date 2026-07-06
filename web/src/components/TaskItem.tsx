@@ -9,10 +9,16 @@ interface Props {
   onDelete: (id: string) => void
 }
 
-export default function TaskItem({ task, role, onChangeStatus, onDelete }: Props) {
-  // UI gating as defense-in-depth. NOTE: this is the ONLY access control in the
-  // starter — there is no DB-level enforcement yet (that is Task 1c). A viewer
-  // who bypasses the client can still write.
+export default function TaskItem({
+  task,
+  role,
+  onChangeStatus,
+  onDelete,
+}: Props) {
+  // UI gating as defense-in-depth for a better UX. The actual security
+  // boundary is enforced server-side by RLS policies
+  // (supabase/policies/rls_policies.sql), a viewer who bypasses the client
+  // and calls the API directly is still denied there.
   const canWrite = role === 'admin' || role === 'member'
   const canDelete = role === 'admin'
 
@@ -31,7 +37,9 @@ export default function TaskItem({ task, role, onChangeStatus, onDelete }: Props
         <select
           value={task.status}
           disabled={!canWrite}
-          onChange={(e) => onChangeStatus(task.id, e.target.value as TaskStatus)}
+          onChange={(e) =>
+            onChangeStatus(task.id, e.target.value as TaskStatus)
+          }
           aria-label={`Status for ${task.title}`}
         >
           {STATUSES.map((s) => (

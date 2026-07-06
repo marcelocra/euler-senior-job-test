@@ -101,7 +101,9 @@ a `workspace_id` column, isolated by Postgres/Supabase row-level security
 this stage, shared tables + RLS keep operations, migrations, and querying
 simple (one schema to evolve, one connection pool, easy cross-workspace admin
 tooling), and they make onboarding a new workspace a single row insert instead
-of provisioning a schema. Schema- or database-per-tenant only earns its
+of provisioning a schema. (That insert itself is a privileged operation, not a
+normal client-side call, see the bootstrapping note below.) Schema- or
+database-per-tenant only earns its
 operational cost when a customer needs hard physical isolation, per-tenant
 schema customization, or a compliance requirement that shared storage can't
 satisfy, none of which applies here.
@@ -136,6 +138,17 @@ The UI's role-based button gating (hiding admin-only actions from
 members/viewers) is kept as defense-in-depth for a better UX, but it is not a
 security boundary, these RLS policies are the sole source of truth, and the
 tests below prove the rules hold even when the UI is bypassed entirely.
+
+**Bootstrapping note.** These policies deliberately have no path for an
+ordinary signed-in user to create the _first_ workspace or membership for
+themselves: there's no `workspaces_insert` policy, and `memberships_insert`
+requires the caller to already be an `admin` of the target workspace. That's
+intentional, a brand-new, membership-less user should not be able to grant
+themselves admin over any workspace by self-inserting a row. Creating a
+workspace and its first admin membership is therefore a privileged operation,
+done via the seed script (`supabase/seed.sql`), the service-role key in a
+trusted context, or a server-side function, never via a normal client-side
+insert under RLS.
 
 **Tests (`web/src/test/access-control.example.test.ts`).** Integration tests
 against a real (disposable/local) Supabase project, exercising actual Auth +
