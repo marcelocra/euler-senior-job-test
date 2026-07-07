@@ -21,6 +21,8 @@ export interface Task {
   title: string
   status: TaskStatus
   assignee_id: string | null
+  archived: boolean
+  archived_at: string | null
   created_at: string
   updated_at: string
 }

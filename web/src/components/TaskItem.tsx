@@ -7,6 +7,7 @@ interface Props {
   role: Role | null
   onChangeStatus: (id: string, status: TaskStatus) => void
   onDelete: (id: string) => void
+  onToggleArchive: (id: string, archived: boolean) => void
 }
 
 export default function TaskItem({
@@ -14,6 +15,7 @@ export default function TaskItem({
   role,
   onChangeStatus,
   onDelete,
+  onToggleArchive,
 }: Props) {
   // UI gating as defense-in-depth for a better UX. The actual security
   // boundary is enforced server-side by RLS policies
@@ -34,6 +36,7 @@ export default function TaskItem({
         <span className={`badge ${task.status}`}>
           {task.status.replace('_', ' ')}
         </span>
+        {task.archived && <span className="badge archived">Archived</span>}
         <select
           value={task.status}
           disabled={!canWrite}
@@ -48,6 +51,22 @@ export default function TaskItem({
             </option>
           ))}
         </select>
+        {canDelete && !task.archived && (
+          <button
+            onClick={() => onToggleArchive(task.id, true)}
+            aria-label={`Archive ${task.title}`}
+          >
+            Archive
+          </button>
+        )}
+        {canDelete && task.archived && (
+          <button
+            onClick={() => onToggleArchive(task.id, false)}
+            aria-label={`Recover ${task.title}`}
+          >
+            Recover
+          </button>
+        )}
         <button
           disabled={!canDelete}
           onClick={() => onDelete(task.id)}

@@ -58,6 +58,7 @@ let viewerUser: TestUser
 let globexUser: TestUser
 let targetUser: TestUser
 let viewerProbeTaskId: string
+let archivedProbeTaskId: string
 
 function client(key: string) {
   return createClient(supabaseUrl, key, {
@@ -146,6 +147,21 @@ beforeAll(async () => {
 
   expect(probeTaskError).toBeNull()
   viewerProbeTaskId = probeTask?.id ?? ''
+
+  const { data: archivedProbe, error: archivedProbeError } = await service
+    .from('tasks')
+    .insert({
+      workspace_id: ACME,
+      title: `${runId} archived probe`,
+      status: 'todo',
+      archived: true,
+      archived_at: new Date().toISOString(),
+    })
+    .select('id')
+    .single()
+
+  expect(archivedProbeError).toBeNull()
+  archivedProbeTaskId = archivedProbe?.id ?? ''
 
   adminAcme = await signInAs(adminUser)
   memberAcme = await signInAs(memberUser)
@@ -353,5 +369,118 @@ describe('workspace isolation & roles (RLS)', () => {
       .select('id')
 
     expectDenied(crossWorkspaceMembership)
+  })
+})
+
+describe('task archiving (RLS)', () => {
+  it('non-admins cannot see archived tasks', async () => {
+    const memberView = await memberAcme
+      .from('tasks')
+      .select('id')
+      .eq('id', archivedProbeTaskId)
+
+    expect(memberView.error).toBeNull()
+    expect(memberView.data).toEqual([])
+
+    const viewerView = await viewerAcme
+      .from('tasks')
+      .select('id')
+      .eq('id', archivedProbeTaskId)
+
+    expect(viewerView.error).toBeNull()
+    expect(viewerView.data).toEqual([])
+  })
+
+  it('an admin can see archived tasks', async () => {
+    const adminView = await adminAcme
+      .from('tasks')
+      .select('id, archived')
+      .eq('id', archivedProbeTaskId)
+      .single()
+
+    expect(adminView.error).toBeNull()
+    expect(adminView.data?.archived).toBe(true)
+  })
+
+  it('a member cannot archive or recover tasks', async () => {
+    const created = await memberAcme
+      .from('tasks')
+      .insert({
+        workspace_id: ACME,
+        title: `${runId} member archive probe`,
+        status: 'todo',
+      })
+      .select('id')
+      .single()
+
+    expect(created.error).toBeNull()
+    expect(created.data).not.toBeNull()
+
+    const archiveResult = await memberAcme
+      .from('tasks')
+      .update({
+        archived: true,
+        archived_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', created.data!.id)
+      .select('id')
+
+    expectDenied(archiveResult)
+
+    const recoverResult = await memberAcme
+      .from('tasks')
+      .update({
+        archived: false,
+        archived_at: null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', archivedProbeTaskId)
+      .select('id')
+
+    expectDenied(recoverResult)
+  })
+
+  it('an admin can archive and recover tasks', async () => {
+    const created = await adminAcme
+      .from('tasks')
+      .insert({
+        workspace_id: ACME,
+        title: `${runId} admin archive probe`,
+        status: 'todo',
+      })
+      .select('id')
+      .single()
+
+    expect(created.error).toBeNull()
+    expect(created.data).not.toBeNull()
+
+    const archived = await adminAcme
+      .from('tasks')
+      .update({
+        archived: true,
+        archived_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', created.data!.id)
+      .select('id, archived')
+
+    expect(archived.error).toBeNull()
+    expect(archived.data).toHaveLength(1)
+    expect(archived.data?.[0].archived).toBe(true)
+
+    const recovered = await adminAcme
+      .from('tasks')
+      .update({
+        archived: false,
+        archived_at: null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', created.data!.id)
+      .select('id, archived')
+
+    expect(recovered.error).toBeNull()
+    expect(recovered.data).toHaveLength(1)
+    expect(recovered.data?.[0].archived).toBe(false)
   })
 })

@@ -67,7 +67,16 @@ create policy tasks_select
 on public.tasks
 for select
 to authenticated
-using (public.is_workspace_member(workspace_id));
+using (
+  public.is_workspace_member(workspace_id)
+  and (
+    not archived
+    or public.has_workspace_role(
+      workspace_id,
+      array['admin']::public.user_role[]
+    )
+  )
+);
 
 create policy tasks_insert
 on public.tasks
@@ -78,6 +87,13 @@ with check (
     workspace_id,
     array['admin', 'member']::public.user_role[]
   )
+  and (
+    not archived
+    or public.has_workspace_role(
+      workspace_id,
+      array['admin']::public.user_role[]
+    )
+  )
 );
 
 create policy tasks_update
@@ -87,13 +103,27 @@ to authenticated
 using (
   public.has_workspace_role(
     workspace_id,
-    array['admin', 'member']::public.user_role[]
+    array['admin']::public.user_role[]
+  )
+  or (
+    public.has_workspace_role(
+      workspace_id,
+      array['member']::public.user_role[]
+    )
+    and not archived
   )
 )
 with check (
   public.has_workspace_role(
     workspace_id,
-    array['admin', 'member']::public.user_role[]
+    array['admin']::public.user_role[]
+  )
+  or (
+    public.has_workspace_role(
+      workspace_id,
+      array['member']::public.user_role[]
+    )
+    and not archived
   )
 );
 

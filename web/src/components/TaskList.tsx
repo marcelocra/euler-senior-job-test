@@ -11,8 +11,10 @@ export default function TaskList() {
   const [searchResults, setSearchResults] = useState<Task[] | null>(null)
   const [loading, setLoading] = useState(false)
   const [newTitle, setNewTitle] = useState('')
+  const [showArchived, setShowArchived] = useState(false)
 
   const canWrite = activeRole === 'admin' || activeRole === 'member'
+  const isAdmin = activeRole === 'admin'
 
   // Clear anything from the previous workspace the instant it changes, so
   // there's no gap where the new workspace's view still shows old data while
@@ -46,11 +48,14 @@ export default function TaskList() {
     }
     const requestId = ++loadRequestIdRef.current
     setLoading(true)
-    const { data, error } = await supabase
+    let query = supabase
       .from('tasks')
       .select('*')
       .eq('workspace_id', activeWorkspaceId)
-      .order('created_at', { ascending: false })
+    if (!showArchived) {
+      query = query.eq('archived', false)
+    }
+    const { data, error } = await query.order('created_at', { ascending: false })
     if (loadRequestIdRef.current !== requestId) return
     if (error) {
       console.error('Failed to load tasks', error)
@@ -58,7 +63,7 @@ export default function TaskList() {
       setTasks(data as Task[])
     }
     setLoading(false)
-  }, [activeWorkspaceId])
+  }, [activeWorkspaceId, showArchived])
 
   useEffect(() => {
     void loadTasks()
@@ -90,11 +95,15 @@ export default function TaskList() {
       return
     }
     const controller = new AbortController()
-    supabase
+    let query = supabase
       .from('tasks')
       .select('*')
       .eq('workspace_id', activeWorkspaceId)
       .ilike('title', `%${term}%`)
+    if (!showArchived) {
+      query = query.eq('archived', false)
+    }
+    query
       .order('created_at', { ascending: false })
       .abortSignal(controller.signal)
       .then(({ data, error }) => {
@@ -106,7 +115,7 @@ export default function TaskList() {
         setSearchResults((data ?? []) as Task[])
       })
     return () => controller.abort()
-  }, [search, activeWorkspaceId])
+  }, [search, activeWorkspaceId, showArchived])
 
   // Sync the title directly off the count on every change, instead of
   // polling a value that's already available at render time.
@@ -150,6 +159,22 @@ export default function TaskList() {
     void loadTasks()
   }
 
+  async function setArchived(id: string, archived: boolean) {
+    const { error } = await supabase
+      .from('tasks')
+      .update({
+        archived,
+        archived_at: archived ? new Date().toISOString() : null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', id)
+    if (error) {
+      console.error('Failed to update archive status', error)
+      return
+    }
+    void loadTasks()
+  }
+
   const visible = searchResults ?? tasks
 
   return (
@@ -175,6 +200,16 @@ export default function TaskList() {
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
+        {isAdmin && (
+          <label className="row">
+            <input
+              type="checkbox"
+              checked={showArchived}
+              onChange={(e) => setShowArchived(e.target.checked)}
+            />
+            Show archived
+          </label>
+        )}
         {loading && <span className="muted">Loading…</span>}
       </div>
 
@@ -190,6 +225,7 @@ export default function TaskList() {
             role={activeRole}
             onChangeStatus={changeStatus}
             onDelete={deleteTask}
+            onToggleArchive={setArchived}
           />
         ))
       )}
